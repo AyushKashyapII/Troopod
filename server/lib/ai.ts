@@ -773,22 +773,83 @@ export async function buildIntroMessage(
 }
 
 // FIX: Chat editor now explicitly guards against the model collapsing the page into an empty shell
-const chatEditorSystem = `You edit an existing landing page HTML based on a user instruction.
+const chatEditorSystem = `You are an expert front-end developer editing an existing landing page HTML.
+The user has already described exactly WHAT they want changed (as a detailed EDIT_INTENT).
 
 STRICT RULES:
-- Make ONLY the change the user asked for. Preserve everything else.
-- NEVER replace the page with a near-empty shell. The output must remain a full marketing page.
-- NEVER remove existing sections unless user explicitly says to remove them.
+- Make ONLY the targeted change described in EDIT_INTENT. Leave everything else untouched.
+- NEVER replace the page with a near-empty shell. Keep all existing sections and content.
+- NEVER remove existing sections unless the user explicitly asked to remove them.
 - NEVER add <iframe>, <object>, <embed>, or meta refresh.
-- For new images: use real https://images.unsplash.com/photo-[ID]?w=800&q=80&auto=format&fit=crop URLs only.
-- If the instruction is vague (e.g. "make it better"), improve visual polish: spacing, colors, typography. Do not delete content.
+- For new images: use real https://images.unsplash.com/photo-[ID]?w=800&q=80&auto=format&fit=crop URLs.
+- Apply the change surgically: modify only the relevant HTML tags, classes, or inline styles.
 - Return the COMPLETE updated HTML document. No markdown. No explanation. No partial output.`
+
+/**
+ * Strip base64-encoded data: URLs from HTML (replace with placeholder src).
+ * This prevents blowing the token budget when the HTML embeds large images.
+ */
+function stripBase64FromHtml(html: string): string {
+  return html.replace(/src="data:[^"]{50,}"/gi, 'src="[base64-image-removed-to-save-tokens]"')
+}
+
+/**
+ * Step 1 of 2-step chat: use gpt-4o-mini to expand a short user message
+ * into a precise technical edit instruction. Cheap + fast.
+ */
+async function expandUserIntent(openai: OpenAI, message: string, htmlSummary: string): Promise<string> {
+  const r = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    temperature: 0.3,
+    max_tokens: 400,
+    messages: [
+      {
+        role: 'system',
+        content: `You translate a user's casual landing page edit request into a precise technical HTML edit instruction.
+
+Rule: Output 2-5 bullet points. Each bullet = one specific, actionable change.
+Be concrete: name which element (e.g. "the <h1> headline", "the nav background", "all .feature-card elements"),
+what property to change (font-size, background-color, text content, etc.), and the new value.
+Never write vague instructions like "improve the design" — always specify exactly what to change.
+Be concise — 80 words max total.`,
+      },
+      {
+        role: 'user',
+        content: `PAGE STRUCTURE SUMMARY:
+${htmlSummary}
+
+USER REQUEST: ${message}`,
+      },
+    ],
+  })
+  return r.choices[0]?.message?.content?.trim() ?? message
+}
+
+/**
+ * Build a short structural summary of the HTML (tags + text) without full content.
+ * Used for intent expansion so we don't send full HTML to the mini model.
+ */
+function buildHtmlStructureSummary(html: string): string {
+  // Extract tag names (deduplicated) and first-line text visible in the page
+  const tags = [...new Set((html.match(/<(h[1-6]|p|button|nav|section|footer|header|div)[^>]*>/gi) ?? []).map(t => t.match(/<(\w+)/)?.[1]?.toLowerCase()).filter(Boolean))]
+  const texts = (html.match(/>([^<>]{4,80})</g) ?? []).map(t => t.slice(1, -1).trim()).filter(Boolean).slice(0, 12)
+  return `Tags present: ${tags.join(', ')}\n\nVisible text samples:\n${texts.map(t => `- "${t}"`).join('\n')}`.slice(0, 1500)
+}
 
 export async function chatEditHtml(
   openai: OpenAI,
   html: string,
   instruction: string,
 ): Promise<string> {
+  // Strip base64 images to keep well within token budget
+  const safeHtml = stripBase64FromHtml(html)
+
+  // Hard-cap HTML at ~90k chars (~22k tokens) — trim middle if too large
+  const MAX_HTML_CHARS = 90_000
+  const trimmedHtml = safeHtml.length > MAX_HTML_CHARS
+    ? safeHtml.slice(0, 45_000) + '\n<!-- ...middle trimmed to save tokens... -->\n' + safeHtml.slice(-45_000)
+    : safeHtml
+
   const r = await openai.chat.completions.create({
     model: 'gpt-4o',
     temperature: 0.25,
@@ -796,7 +857,7 @@ export async function chatEditHtml(
       { role: 'system', content: chatEditorSystem },
       {
         role: 'user',
-        content: `Current HTML:\n${html}\n\nUser instruction:\n${instruction}\n\nReturn complete updated HTML only.`,
+        content: `EDIT_INTENT (apply this precisely):\n${instruction}\n\nCURRENT HTML:\n${trimmedHtml}\n\nReturn the full updated HTML document only.`,
       },
     ],
     max_tokens: 8192,
@@ -938,11 +999,18 @@ export async function runChatEdit(input: {
   }
 
   const openai = getOpenai()!
-  const hadImg = /<img\b/i.test(input.html)
-  const next = await chatEditHtml(openai, input.html, input.message)
+  const hadImg = /(<img\b)/i.test(input.html)
+
+  // ── Step 1: Expand user intent cheaply with gpt-4o-mini ──────────────────
+  const htmlSummary = buildHtmlStructureSummary(input.html)
+  const detailedIntent = await expandUserIntent(openai, input.message, htmlSummary)
+  console.log('[chat] Expanded intent:', detailedIntent)
+
+  // ── Step 2: Apply the edit with gpt-4o using full HTML ────────────────────
+  const next = await chatEditHtml(openai, input.html, detailedIntent)
   const out = sanitizeGeneratedHtml(next || input.html)
 
-  // FIX: Guard — if AI collapsed the page, return original
+  // Guard — if AI collapsed the page, return original
   if (
     isGeneratedHtmlDegenerate(out, hadImg) &&
     !isGeneratedHtmlDegenerate(input.html, hadImg)

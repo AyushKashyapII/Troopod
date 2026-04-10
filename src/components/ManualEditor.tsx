@@ -170,10 +170,10 @@ function TreeItem({
   const hasChildren = node.children.length > 0
 
   return (
-    <div>
+    <div className="min-w-0 w-full">
       <div
         className={cn(
-          'flex items-center gap-1 rounded px-1 py-[3px] cursor-pointer select-none group',
+          'flex min-w-0 items-center gap-1 rounded px-1 py-[3px] cursor-pointer select-none group',
           'hover:bg-neutral-800/70 transition-colors',
           isSelected && 'bg-violet-600/20 border border-violet-500/40',
         )}
@@ -194,14 +194,14 @@ function TreeItem({
           {TAG_ICONS[node.tag] ?? <Square className="h-3.5 w-3.5 text-neutral-600" />}
         </span>
         <span className={cn(
-          'text-xs truncate',
+          'text-xs truncate min-w-0 flex-1',
           isSelected ? 'text-violet-200' : 'text-neutral-400 group-hover:text-neutral-200',
         )}>
           {node.label}
         </span>
       </div>
       {open && hasChildren && (
-        <div>
+        <div className="min-w-0 w-full">
           {node.children.map(child => (
             <TreeItem key={child.id} node={child} depth={depth + 1} selectedId={selectedId} onSelect={onSelect} />
           ))}
@@ -535,7 +535,7 @@ export function ManualEditor({ iframeRef, html, onHtmlPatched }: ManualEditorPro
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-xl border border-neutral-800/90 bg-neutral-950/90 shadow-sm">
+    <div className="flex h-full w-full min-h-0 flex-col rounded-xl border border-neutral-800/90 bg-neutral-950/90 shadow-sm overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3 shrink-0">
         <div className="flex items-center gap-2">
@@ -553,8 +553,8 @@ export function ManualEditor({ iframeRef, html, onHtmlPatched }: ManualEditorPro
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Tree */}
-        <ScrollArea className="flex-1 min-h-[120px] border-b border-neutral-800/50">
-          <div className="py-2 pr-1">
+        <ScrollArea className="flex-1 min-h-[120px] border-b border-neutral-800/50 w-full">
+          <div className="py-2 pr-1 w-full overflow-hidden">
             {tree.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-neutral-600 text-xs gap-2">
                 <Layers className="h-8 w-8 opacity-30" />

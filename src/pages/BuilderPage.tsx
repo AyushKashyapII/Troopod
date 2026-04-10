@@ -23,7 +23,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Tooltip,
   TooltipContent,
@@ -93,6 +92,8 @@ export default function BuilderPage() {
   const [publishedSlug, setPublishedSlug] = useState('')
   const [publishedViewUrl, setPublishedViewUrl] = useState('')
   const [publishLoading, setPublishLoading] = useState(false)
+  const [sidebarTab, setSidebarTab] = useState<'ai' | 'manual'>('ai')
+  const [mobileSidebarTab, setMobileSidebarTab] = useState<'ai' | 'manual' | 'preview'>('ai')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const initOnce = useRef(false)
@@ -304,7 +305,7 @@ export default function BuilderPage() {
   }
 
   const chatPanel = (
-    <div className="flex h-full min-h-0 flex-col rounded-xl border border-neutral-800/90 bg-neutral-950/90 shadow-sm">
+    <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-800/90 bg-neutral-950/90 shadow-sm">
       <div className="flex items-center gap-2 border-b border-neutral-800 px-4 py-3 shrink-0">
         <Bot className="h-4 w-4 text-violet-400" />
         <span className="font-semibold text-white text-sm">AI Agent</span>
@@ -383,37 +384,49 @@ export default function BuilderPage() {
     </div>
   )
 
-  // Tabbed left panel: AI Agent + Manual Edit
+  // Left panel: custom tab toggle so BOTH panels stay mounted (prevents column-width collapse)
   const leftPanel = (
-    <div className="flex min-h-0 flex-col h-full">
-      <Tabs defaultValue="ai" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="grid w-full grid-cols-2 mb-3 shrink-0 rounded-xl bg-neutral-900 border border-neutral-800">
-          <TabsTrigger
-            value="ai"
-            className="flex items-center gap-1.5 rounded-lg text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white"
-          >
-            <Bot className="h-3.5 w-3.5" />
-            AI Agent
-          </TabsTrigger>
-          <TabsTrigger
-            value="manual"
-            className="flex items-center gap-1.5 rounded-lg text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white"
-          >
-            <PencilRuler className="h-3.5 w-3.5" />
-            Edit Manually
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="ai" className="min-h-0 flex-1 mt-0 data-[state=active]:flex data-[state=active]:flex-col">
-          {chatPanel}
-        </TabsContent>
-        <TabsContent value="manual" className="min-h-0 flex-1 mt-0 data-[state=active]:flex data-[state=active]:flex-col">
-          <ManualEditor
-            iframeRef={manualIframeRef}
-            html={html}
-            onHtmlPatched={(docHtml) => pushHtml(docHtml)}
-          />
-        </TabsContent>
-      </Tabs>
+    <div className="flex h-full min-h-0 w-full flex-col">
+      {/* Tab switcher */}
+      <div className="mb-3 flex shrink-0 gap-1 rounded-xl border border-neutral-800 bg-neutral-900 p-1">
+        <button
+          type="button"
+          onClick={() => setSidebarTab('ai')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all',
+            sidebarTab === 'ai'
+              ? 'bg-violet-600 text-white shadow-sm'
+              : 'text-neutral-400 hover:text-neutral-200',
+          )}
+        >
+          <Bot className="h-3.5 w-3.5" />
+          AI Agent
+        </button>
+        <button
+          type="button"
+          onClick={() => setSidebarTab('manual')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all',
+            sidebarTab === 'manual'
+              ? 'bg-violet-600 text-white shadow-sm'
+              : 'text-neutral-400 hover:text-neutral-200',
+          )}
+        >
+          <PencilRuler className="h-3.5 w-3.5" />
+          Edit Manually
+        </button>
+      </div>
+      {/* Both panels always mounted — visibility toggled so column never collapses */}
+      <div className={cn('min-h-0 min-w-0 flex-1 overflow-hidden', sidebarTab === 'ai' ? 'flex flex-col' : 'hidden')}>
+        {chatPanel}
+      </div>
+      <div className={cn('min-h-0 min-w-0 flex-1 overflow-hidden', sidebarTab === 'manual' ? 'flex flex-col' : 'hidden')}>
+        <ManualEditor
+          iframeRef={manualIframeRef}
+          html={html}
+          onHtmlPatched={(docHtml) => pushHtml(docHtml)}
+        />
+      </div>
     </div>
   )
 
@@ -480,8 +493,7 @@ export default function BuilderPage() {
         <TooltipContent>View source</TooltipContent>
       </Tooltip>
       <span className="ml-auto hidden text-xs text-neutral-500 lg:inline">
-        Click image → URL or file · click text → font, size, color & copy · dashed strip = your ad if
-        the page had no images
+        Switch to <strong className="text-neutral-400">Edit Manually</strong> tab to click &amp; edit any element
       </span>
     </div>
   )
@@ -599,36 +611,51 @@ export default function BuilderPage() {
           </div>
         </header>
 
-        {/* Desktop split: minmax(0,1fr) lets preview use full remaining width */}
-        <div className="mx-auto hidden min-h-0 flex-1 gap-6 p-5 md:grid md:max-w-[1680px] md:grid-cols-[minmax(300px,34%)_minmax(0,1fr)] md:items-start md:gap-8 md:p-6">
-          <div className="flex min-h-0 min-w-0 md:sticky md:top-[4.25rem] md:h-[calc(100dvh-4.5rem)] md:self-start">
+        {/* Desktop split — left col is fixed 320px so it NEVER changes between tabs */}
+        <div
+          className="mx-auto hidden min-h-0 flex-1 items-start gap-8 p-6 md:grid md:max-w-[1680px]"
+          style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}
+        >
+          <div
+            className="flex min-h-0 w-full min-w-0 overflow-hidden md:sticky md:top-[4.25rem] md:self-start"
+            style={{ height: 'calc(100dvh - 4.5rem)' }}
+          >
             {leftPanel}
           </div>
           <div className="min-w-0">{previewPanel}</div>
         </div>
 
-        {/* Mobile tabs */}
+        {/* Mobile layout */}
         <div className="flex min-h-0 flex-1 flex-col p-4 md:hidden">
-          <Tabs defaultValue="ai" className="flex min-h-0 flex-1 flex-col">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="ai">AI Agent</TabsTrigger>
-              <TabsTrigger value="manual">Edit</TabsTrigger>
-              <TabsTrigger value="preview">Preview</TabsTrigger>
-            </TabsList>
-            <TabsContent value="ai" className="mt-3 min-h-[50vh] flex-1">
-              {chatPanel}
-            </TabsContent>
-            <TabsContent value="manual" className="mt-3 min-h-[50vh] flex-1">
-              <ManualEditor
-                iframeRef={manualIframeRef}
-                html={html}
-                onHtmlPatched={(docHtml) => pushHtml(docHtml)}
-              />
-            </TabsContent>
-            <TabsContent value="preview" className="mt-3 min-h-[50vh] flex-1 overflow-auto">
-              {previewPanel}
-            </TabsContent>
-          </Tabs>
+          {/* Mobile tab bar */}
+          <div className="mb-3 flex shrink-0 gap-1 rounded-xl border border-neutral-800 bg-neutral-900 p-1">
+            {(['ai', 'manual', 'preview'] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setMobileSidebarTab(tab)}
+                className={cn(
+                  'flex flex-1 items-center justify-center rounded-lg py-2 text-xs font-medium transition-all',
+                  mobileSidebarTab === tab ? 'bg-violet-600 text-white' : 'text-neutral-400 hover:text-neutral-200',
+                )}
+              >
+                {tab === 'ai' ? 'AI Agent' : tab === 'manual' ? 'Edit' : 'Preview'}
+              </button>
+            ))}
+          </div>
+          <div className={cn('min-h-[50vh] flex-1', mobileSidebarTab === 'ai' ? 'flex flex-col' : 'hidden')}>
+            {chatPanel}
+          </div>
+          <div className={cn('min-h-[50vh] flex-1', mobileSidebarTab === 'manual' ? 'flex flex-col' : 'hidden')}>
+            <ManualEditor
+              iframeRef={manualIframeRef}
+              html={html}
+              onHtmlPatched={(docHtml) => pushHtml(docHtml)}
+            />
+          </div>
+          <div className={cn('min-h-[50vh] flex-1 overflow-auto', mobileSidebarTab === 'preview' ? 'block' : 'hidden')}>
+            {previewPanel}
+          </div>
         </div>
 
         <PublishModal
