@@ -133,10 +133,21 @@ html { scroll-behavior: smooth; }
 
 ---
 
-## FONT LOADING
-Import the font specified in BRAND_DESIGN_SPEC font_family_heading via Google Fonts:
+## FONT LOADING (MANDATORY)
+Extract font_family_heading from BRAND_DESIGN_SPEC. If it references a Google Font:
 \`<link rel="preconnect" href="https://fonts.googleapis.com">\`
 \`<link href="https://fonts.googleapis.com/css2?family=FONT_NAME:wght@400;600;700;800&display=swap" rel="stylesheet">\`
+Apply the font to all headings and body via CSS custom properties.
+
+---
+
+## BRAND FIDELITY CHECKLIST — verify before outputting
+- [ ] page_background from BRAND_DESIGN_SPEC applied to <body> background
+- [ ] nav_background from BRAND_DESIGN_SPEC applied to <nav>
+- [ ] font_family_heading from BRAND_DESIGN_SPEC on all h1/h2/h3
+- [ ] surface_card from BRAND_DESIGN_SPEC on feature cards
+- [ ] border_radius_base from BRAND_DESIGN_SPEC on cards, buttons
+- [ ] Ad primary_colors_hex[0] ONLY on CTA buttons and closing band — nowhere else
 
 ---
 
@@ -145,7 +156,8 @@ Import the font specified in BRAND_DESIGN_SPEC font_family_heading via Google Fo
 ❌ Never use plain white (#fff) for the entire hero background — use a gradient or the brand background color
 ❌ Never use placeholder text like "Lorem ipsum" or "[Insert headline here]"
 ❌ Never use relative image paths or example.com image URLs
-❌ Never output markdown, explanation text, or code fences — HTML only`
+❌ Never output markdown, explanation text, or code fences — HTML only
+❌ Never ignore BRAND_DESIGN_SPEC colors and fonts — they are the law`
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 
@@ -290,6 +302,116 @@ export async function fetchJinaPage(url: string): Promise<{ ok: boolean; text: s
   }
 }
 
+/**
+ * Fetch the raw HTML of a page so we can extract real CSS design tokens.
+ * We use Jina's html format to get a clean rendition of the source.
+ * Falls back gracefully to an empty string if anything fails.
+ */
+export async function fetchPageRawHtml(url: string): Promise<string> {
+  try {
+    const u = url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`
+    // Jina with X-Return-Format: html gives us the actual page HTML
+    const endpoint = `https://r.jina.ai/${encodeURIComponent(u)}`
+    const res = await fetch(endpoint, {
+      headers: {
+        Accept: 'text/html',
+        'X-Return-Format': 'html',
+        'X-Timeout': '45',
+      },
+      signal: AbortSignal.timeout(45000),
+    })
+    if (!res.ok) return ''
+    const html = await res.text()
+    // Extract just the style blocks and relevant attributes — trim to 60k chars
+    return html.slice(0, 60_000)
+  } catch {
+    // Fallback: try direct fetch with a browser-like UA
+    try {
+      const u = url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`
+      const res = await fetch(u, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+          Accept: 'text/html',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!res.ok) return ''
+      return (await res.text()).slice(0, 60_000)
+    } catch {
+      return ''
+    }
+  }
+}
+
+/**
+ * Extract visual design tokens from raw page HTML/CSS text.
+ * Returns a structured string summary of colors, fonts, border-radii found.
+ */
+export function extractVisualTokensFromHtml(rawHtml: string): string {
+  if (!rawHtml) return ''
+
+  const findings: string[] = []
+
+  // Extract colors from CSS (hex codes)
+  const hexColors = [...new Set(
+    (rawHtml.match(/#([0-9a-fA-F]{3}){1,2}\b/g) ?? [])
+      .filter(c => {
+        // Filter out very dark/light trivial colors only if we have many others
+        const h = c.slice(1).padEnd(6, c.slice(1))
+        const r = parseInt(h.slice(0,2),16)
+        const g = parseInt(h.slice(2,4),16)
+        const b = parseInt(h.slice(4,6),16)
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000
+        return brightness > 10 && brightness < 245 // exclude pure black/white
+      })
+  )].slice(0, 20)
+  if (hexColors.length > 0) findings.push(`Actual page hex colors (from CSS): ${hexColors.join(', ')}`)
+
+  // Extract font-family declarations
+  const fontMatches = [...new Set(
+    (rawHtml.match(/font-family\s*:\s*([^;}"']+)/gi) ?? [])
+      .map(m => m.replace(/font-family\s*:\s*/i, '').trim().slice(0, 80))
+  )].slice(0, 6)
+  if (fontMatches.length > 0) findings.push(`Actual CSS font-family values: ${fontMatches.join(' | ')}`)
+
+  // Extract Google Fonts links (very reliable signal)
+  const gFonts = (rawHtml.match(/fonts\.googleapis\.com\/css[^"'\s>]+/g) ?? []).slice(0, 3)
+  if (gFonts.length > 0) findings.push(`Google Fonts loaded: ${gFonts.join(', ')}`)
+
+  // Extract border-radius values
+  const radii = [...new Set(
+    (rawHtml.match(/border-radius\s*:\s*([0-9]+(?:\.\d+)?(?:px|rem|em|%))/g) ?? [])
+      .map(m => m.replace(/border-radius\s*:\s*/i, '').trim())
+  )].slice(0, 5)
+  if (radii.length > 0) findings.push(`Border-radius values found: ${radii.join(', ')}`)
+
+  // Detect navbar/header background colors
+  const navBg = rawHtml.match(/(?:nav|header|navbar)[^{]*\{[^}]*background(?:-color)?\s*:\s*([^;}\/]+)/gi)
+  if (navBg) {
+    const navColors = navBg.map(m => {
+      const match = m.match(/background(?:-color)?\s*:\s*([^;}\/]+)/i)
+      return match?.[1]?.trim()
+    }).filter(Boolean).slice(0, 3)
+    if (navColors.length) findings.push(`Nav/header background: ${navColors.join(', ')}`)
+  }
+
+  // Detect primary button colors
+  const btnColors = rawHtml.match(/(?:btn|button|cta)[^{]*\{[^}]*background(?:-color)?\s*:\s*([^;}\/]+)/gi)
+  if (btnColors) {
+    const colors = btnColors.map(m => {
+      const match = m.match(/background(?:-color)?\s*:\s*([^;}\/]+)/i)
+      return match?.[1]?.trim()
+    }).filter(Boolean).slice(0, 3)
+    if (colors.length) findings.push(`Button/CTA background colors: ${colors.join(', ')}`)
+  }
+
+  // Meta theme-color
+  const themeColor = rawHtml.match(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)/i)
+  if (themeColor?.[1]) findings.push(`Meta theme-color: ${themeColor[1]}`)
+
+  return findings.join('\n')
+}
+
 /** Remove embeds that nest the whole app inside the preview. */
 export function sanitizeGeneratedHtml(html: string): string {
   return html
@@ -411,45 +533,53 @@ export async function inferReferenceSiteDesign(
   adJson: unknown,
   imageBase64: string | null,
   imageUrl: string | null,
+  visualTokens: string,  // NEW: actual extracted CSS tokens
 ): Promise<string> {
-  const excerpt = jinaExcerpt.slice(0, 20_000)
+  const excerpt = jinaExcerpt.slice(0, 16_000)
 
-  const textBlock = `You see the user's ad creative as the attached image.
+  const textBlock = `You are extracting a precise brand design specification to replicate in a new HTML page.
 
-REFERENCE_URL (the generated page must feel like this brand's marketing site):
+REFERENCE_URL (the generated page MUST feel like it belongs to this brand):
 ${landingUrl}
 
-JINA_EXCERPT (may be thin — use URL hostname as primary signal for well-known brands):
-${excerpt || '(none)'}
+${ visualTokens ? `=== ACTUAL CSS/VISUAL TOKENS SCRAPED FROM THE SITE ===
+These are REAL values from the site's CSS. Use them as ground truth — they override your priors:
+${visualTokens}
+===\n` : '' }
+JINA_TEXT_EXCERPT (content structure — use for layout hints, font names, brand personality):
+${excerpt || '(unavailable — use URL hostname as signal for well-known brands)'}
 
-AD_ANALYSIS_JSON (for understanding ad colors/tone — NOT for page shell colors):
+AD_ANALYSIS_JSON (ad colors/tone — do NOT use ad colors for page shell):
 ${JSON.stringify(adJson, null, 2)}
 
-Return valid JSON only. Keys:
+Your job: produce a faithful brand design spec that, when applied to a marketing landing page,
+will make that page LOOK and FEEL like it belongs to ${landingUrl}.
+
+Return valid JSON only (no markdown). Keys:
 - brand_identity_guess: string
 - confidence: "high" | "medium" | "low"
-- font_family_heading: string (full CSS font-family value, e.g. "'Poppins', sans-serif")
-- font_family_body: string
+- font_family_heading: string   // full CSS font-family, e.g. "'Poppins', sans-serif" — USE scraped Google Fonts if available
+- font_family_body: string      // full CSS font-family for body text
 - colors_hex: {
-    page_background: string,
-    surface_card: string,
-    text_primary: string,
-    text_secondary: string,
-    nav_background: string,
-    nav_link_color: string,
-    border_subtle: string,
-    section_alt_background: string
+    page_background: string,    // main page bg — USE scraped color if available
+    surface_card: string,       // card/panel background
+    text_primary: string,       // main text color
+    text_secondary: string,     // secondary/muted text
+    nav_background: string,     // nav bar bg — USE scraped nav color if available
+    nav_link_color: string,     // nav link text color
+    border_subtle: string,      // subtle dividers
+    section_alt_background: string  // alternating section bg
   }
-- border_radius_base: string (e.g. "8px", "16px", "4px")
-- shadow_style: string (e.g. "0 4px 20px rgba(0,0,0,0.08)")
+- border_radius_base: string    // USE scraped border-radius if available, e.g. "8px"
+- shadow_style: string          // e.g. "0 4px 20px rgba(0,0,0,0.08)"
 - layout: {
-    nav_description: string,
-    hero_pattern: string,
+    nav_description: string,    // brief nav bar description
+    hero_pattern: string,       // "split_image_right" | "centred" | "full_bleed" etc
     feature_grid_columns: number,
     section_order: string[]
   }
 - spacing_density: "tight" | "balanced" | "airy"
-- css_notes: string (1-3 sentences on how to implement in CSS)`
+- css_notes: string   // 2-4 sentences: how to faithfully implement this brand in CSS, including any unique visual signatures`
 
   const parts: OpenAI.Chat.ChatCompletionContentPart[] = [
     { type: 'text', text: textBlock },
@@ -470,11 +600,11 @@ Return valid JSON only. Keys:
       {
         role: 'system',
         content:
-          'You are a principal brand and design-systems lead. Output strictly valid JSON. Use real hex colors and concrete font stacks from public knowledge of well-known brands.',
+          'You are a principal brand and design-systems engineer. When actual CSS tokens are provided (colors, fonts, border-radius), you MUST use them directly — do not guess. Return strictly valid JSON only.',
       },
       { role: 'user', content: parts },
     ],
-    max_tokens: 1800,
+    max_tokens: 2000,
   })
   return stripCodeFences(r.choices[0]?.message?.content ?? '{}')
 }
@@ -718,9 +848,10 @@ export async function runGeneratePipeline(input: {
   const hadHeroImage = Boolean(heroImageSrc?.trim())
   const landing = input.landingUrl.trim()
 
-  // Step 1: Parallel — scrape page + analyze ad
-  const [jina, adJson] = await Promise.all([
+  // Step 1: Parallel — scrape page text + scrape raw HTML for CSS tokens + analyze ad
+  const [jina, rawHtml, adJson] = await Promise.all([
     landing ? fetchJinaPage(landing) : Promise.resolve({ ok: false, text: '' }),
+    landing ? fetchPageRawHtml(landing).catch(() => '') : Promise.resolve(''),
     analyzeAdWithVision(openai, input.imageBase64, input.imageUrl),
   ])
 
@@ -728,13 +859,16 @@ export async function runGeneratePipeline(input: {
   const pageText = jina.ok ? jina.text : ''
   const referenceGuidance = landing ? referenceSiteGuidance(landing, pageText) : ''
 
-  // Step 2: Parallel — analyze page content + infer brand design
+  // Extract actual CSS design tokens from the raw HTML
+  const visualTokens = rawHtml ? extractVisualTokensFromHtml(rawHtml) : ''
+
+  // Step 2: Parallel — analyze page content + infer brand design (now with real CSS tokens)
   const [pageUnderstandingJson, brandDesignJson] = await Promise.all([
     !scrapeFailed && pageText.trim()
       ? analyzeLandingPageContent(openai, pageText, landing || 'https://unknown').catch(() => null)
       : Promise.resolve(null),
     landing
-      ? inferReferenceSiteDesign(openai, landing, pageText, adJson, input.imageBase64, input.imageUrl).catch(() => '{}')
+      ? inferReferenceSiteDesign(openai, landing, pageText, adJson, input.imageBase64, input.imageUrl, visualTokens).catch(() => '{}')
       : Promise.resolve('{}'),
   ])
 
