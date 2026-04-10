@@ -546,7 +546,7 @@ export default function BuilderPage() {
     <TooltipProvider>
       <div className="bg-grid flex min-h-screen flex-col">
         <header className="sticky top-0 z-40 border-b border-neutral-800/80 bg-neutral-950/95 backdrop-blur-md">
-          <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-3 px-4 py-3.5 md:flex-nowrap md:px-6">
+          <div className="flex w-full flex-wrap items-center gap-3 px-4 py-3.5 md:flex-nowrap md:px-5">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <Button
                 type="button"
@@ -611,10 +611,10 @@ export default function BuilderPage() {
           </div>
         </header>
 
-        {/* Desktop split — left col is fixed 320px so it NEVER changes between tabs */}
+        {/* Desktop split — left col fixed 280px, preview takes ALL remaining width */}
         <div
-          className="mx-auto hidden min-h-0 flex-1 items-start gap-8 p-6 md:grid md:max-w-[1680px]"
-          style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}
+          className="hidden min-h-0 flex-1 items-start p-3 md:grid md:gap-4 md:p-4"
+          style={{ gridTemplateColumns: '280px minmax(0, 1fr)' }}
         >
           <div
             className="flex min-h-0 w-full min-w-0 overflow-hidden md:sticky md:top-[4.25rem] md:self-start"
