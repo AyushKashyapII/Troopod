@@ -794,31 +794,58 @@ function stripBase64FromHtml(html: string): string {
 }
 
 /**
- * Step 1 of 2-step chat: use gpt-4o-mini to expand a short user message
- * into a precise technical edit instruction. Cheap + fast.
+ * Step 1 of 2-step chat: use gpt-4o to ELEVATE a vague user request into
+ * a comprehensive, senior-designer-level full-page edit specification.
+ * The output tells the executor EXACTLY what to change on EVERY relevant element.
  */
 async function expandUserIntent(openai: OpenAI, message: string, htmlSummary: string): Promise<string> {
   const r = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.3,
-    max_tokens: 400,
+    model: 'gpt-4o',
+    temperature: 0.4,
+    max_tokens: 700,
     messages: [
       {
         role: 'system',
-        content: `You translate a user's casual landing page edit request into a precise technical HTML edit instruction.
+        content: `You are a senior UI/UX designer and front-end engineer.
+The user has given a SHORT, VAGUE edit request for a marketing landing page.
+Your job is to ELEVATE it into a COMPREHENSIVE, PROFESSIONAL design prescription
+that covers EVERY relevant element of the page — not just the obvious one.
 
-Rule: Output 2-5 bullet points. Each bullet = one specific, actionable change.
-Be concrete: name which element (e.g. "the <h1> headline", "the nav background", "all .feature-card elements"),
-what property to change (font-size, background-color, text content, etc.), and the new value.
-Never write vague instructions like "improve the design" — always specify exactly what to change.
-Be concise — 80 words max total.`,
+GUIDING PRINCIPLE: A great designer never changes just one thing. When a theme
+changes, EVERYTHING changes: body background, nav, hero, section alternates,
+cards, buttons, form inputs, footer, text colors, shadows, borders, and hover states.
+
+OUTPUT FORMAT: 6–12 numbered bullet points. Each bullet must:
+- Name the specific HTML element/section (e.g. "<body>", "nav bar", "hero section", ".feature-card", "CTA band", "footer")
+- Give the exact CSS change with concrete values (real hex codes, gradient strings, px values, font weights)
+- Be immediately actionable by a developer — no vague adjectives like "nice" or "modern"
+
+EXAMPLES OF ELEVATION:
+User says "make it dark" → You specify:
+1. <body> background: linear-gradient(135deg, #0a0a0f 0%, #12121e 50%, #0d0d1a 100%)
+2. nav: background rgba(10,10,20,0.95) with backdrop-filter blur(12px), border-bottom 1px solid rgba(255,255,255,0.06)
+3. hero section: background linear-gradient(180deg, #12121e 0%, #0a0a0f 100%), h1 color #f0f0ff, subtext color #9090b0
+4. .feature-card: background #1a1a2a, border 1px solid rgba(255,255,255,0.08), box-shadow 0 4px 24px rgba(0,0,0,0.4)
+5. CTA buttons: keep existing accent color but add glow — box-shadow 0 0 20px rgba(ACCENT,0.4)
+6. CTA band: background linear-gradient(135deg, #1a0a30, #0a0a1e), white headline
+7. footer: background #06060f, text color rgba(255,255,255,0.5)
+8. All body text: color #c8c8d8, links: color #a0a0ff
+9. Card hover: box-shadow 0 8px 32px rgba(0,0,0,0.6), transform translateY(-4px)
+10. Section alternates: background #0f0f1e instead of pure black
+
+User says "make it more premium" → specify metallic gradients, refined typography, generous spacing, glass-morphism cards, etc.
+User says "make headline bigger" → specify the h1 font-size clamp value, line-height, font-weight, letter-spacing, and also update h2 proportionally.
+
+Always elevate. Always cover the full page. Always use real CSS values.`,
       },
       {
         role: 'user',
-        content: `PAGE STRUCTURE SUMMARY:
+        content: `PAGE STRUCTURE (sections and text present):
 ${htmlSummary}
 
-USER REQUEST: ${message}`,
+USER'S REQUEST: "${message}"
+
+Write the elevated, comprehensive design prescription now:`,
       },
     ],
   })
@@ -826,14 +853,38 @@ USER REQUEST: ${message}`,
 }
 
 /**
- * Build a short structural summary of the HTML (tags + text) without full content.
- * Used for intent expansion so we don't send full HTML to the mini model.
+ * Build a richer structural summary of the HTML for the intent expander.
+ * Includes section IDs, class names, key text content — gives the AI real context.
  */
 function buildHtmlStructureSummary(html: string): string {
-  // Extract tag names (deduplicated) and first-line text visible in the page
-  const tags = [...new Set((html.match(/<(h[1-6]|p|button|nav|section|footer|header|div)[^>]*>/gi) ?? []).map(t => t.match(/<(\w+)/)?.[1]?.toLowerCase()).filter(Boolean))]
-  const texts = (html.match(/>([^<>]{4,80})</g) ?? []).map(t => t.slice(1, -1).trim()).filter(Boolean).slice(0, 12)
-  return `Tags present: ${tags.join(', ')}\n\nVisible text samples:\n${texts.map(t => `- "${t}"`).join('\n')}`.slice(0, 1500)
+  // Section/landmark tags with their IDs/classes
+  const sections = (html.match(/<(nav|header|section|footer|main|div)[^>]*(?:id|class)="[^"]*"[^>]*>/gi) ?? [])
+    .map(t => {
+      const tag = t.match(/<(\w+)/)?.[1] ?? ''
+      const id = t.match(/id="([^"]+)"/)?.[1] ?? ''
+      const cls = t.match(/class="([^"]+)"/)?.[1]?.split(' ').slice(0, 2).join(' ') ?? ''
+      return `<${tag}${id ? ` #${id}` : ''}${cls ? ` .${cls}` : ''}>`
+    })
+    .filter(Boolean)
+    .slice(0, 15)
+
+  // Key visible text (h1-h3, button labels, CTA text)
+  const texts = (html.match(/<(?:h[1-3]|button|a\b)[^>]*>([^<]{2,80})<\/(?:h[1-3]|button|a)>/gi) ?? [])
+    .map(t => t.replace(/<[^>]+>/g, '').trim())
+    .filter(Boolean)
+    .slice(0, 10)
+
+  // Detect color scheme hints from inline styles
+  const bgColors = (html.match(/background(?:-color)?:\s*([^;}"']{4,30})/gi) ?? [])
+    .map(m => m.replace(/background(?:-color)?:\s*/i, '').trim())
+    .filter(Boolean)
+    .slice(0, 5)
+
+  return [
+    sections.length ? `Page sections: ${sections.join(', ')}` : '',
+    texts.length ? `Key text: ${texts.map(t => `"${t}"`).join(', ')}` : '',
+    bgColors.length ? `Current backgrounds: ${bgColors.join(', ')}` : '',
+  ].filter(Boolean).join('\n').slice(0, 2000)
 }
 
 export async function chatEditHtml(

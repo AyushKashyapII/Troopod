@@ -155,6 +155,50 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     `
     doc.head.appendChild(style)
 
+    // ── Navigation blocker ────────────────────────────────────────────────────
+    // Prevent ALL links/forms/JS location changes from navigating the iframe.
+    // Only in-page anchor scrolling (#section) is allowed.
+    const navBlocker = doc.createElement('script')
+    navBlocker.textContent = `
+      (function() {
+        // Block <a href> clicks that would navigate away (allow #anchors)
+        document.addEventListener('click', function(e) {
+          var el = e.target;
+          while (el && el.tagName !== 'A') el = el.parentElement;
+          if (!el) return;
+          var href = el.getAttribute('href') || '';
+          // Allow pure anchor scrolling
+          if (href.startsWith('#') || href === '') return;
+          // Block everything else
+          e.preventDefault();
+          e.stopPropagation();
+        }, true);
+
+        // Block all form submissions
+        document.addEventListener('submit', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }, true);
+
+        // Intercept location changes via JS (location.href = '...', location.assign, replace)
+        try {
+          var loc = window.location;
+          ['assign', 'replace'].forEach(function(fn) {
+            var orig = loc[fn].bind(loc);
+            Object.defineProperty(loc, fn, {
+              value: function(url) {
+                if (typeof url === 'string' && url.startsWith('#')) orig(url);
+                // else block
+              },
+              writable: true,
+            });
+          });
+        } catch(_) {}
+      })();
+    `
+    doc.head.appendChild(navBlocker)
+    // ─────────────────────────────────────────────────────────────────────────
+
     const isTextLike = (el: Element | null): el is HTMLElement => {
       if (!el || !(el instanceof HTMLElement)) return false
       if (!el.matches(TEXT_SELECTOR)) return false
