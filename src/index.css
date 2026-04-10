@@ -1,0 +1,105 @@
+@import 'tailwindcss';
+@plugin "tailwindcss-animate";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --color-background: #0a0a0a;
+  --color-card: #141414;
+  --color-border: #262626;
+  --color-muted: #a3a3a3;
+  --color-accent-purple: #8b5cf6;
+  --color-accent-blue: #3b82f6;
+}
+
+@layer base {
+  * {
+    border-color: #262626;
+  }
+  body {
+    @apply bg-background text-neutral-100 font-sans antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Subtle grid background */
+.bg-grid {
+  background-color: #0a0a0a;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.06),
+    transparent
+  );
+  animation: shimmer 1.2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.page-enter {
+  animation: pageEnter 0.45s ease-out both;
+}
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.btn-scale {
+  transition: transform 0.15s ease;
+}
+.btn-scale:hover {
+  transform: scale(1.02);
+}
+.btn-scale:active {
+  transform: scale(0.98);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gradient-btn {
+  background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+}

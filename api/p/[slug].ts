@@ -1,0 +1,18 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getPublishedHtml } from '../../server/lib/publish'
+
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  const slug = req.query.slug
+  const s = Array.isArray(slug) ? slug[0] : slug
+  if (!s) {
+    res.status(400).type('text/plain').send('Bad request')
+    return
+  }
+  const html = getPublishedHtml(s)
+  if (!html) {
+    res.status(404).type('text/plain').send('Not found — use Blob storage on Vercel for persistent pages.')
+    return
+  }
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.status(200).send(html)
+}
