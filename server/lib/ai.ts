@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { MOCK_AD_ANALYSIS, MOCK_HTML, MOCK_INTRO_MESSAGE, mockChatResponse } from './mock'
+import { MOCK_AD_ANALYSIS, MOCK_HTML, MOCK_INTRO_MESSAGE, mockChatResponse } from './mock.js'
 
 // ─── SYSTEM PROMPTS ──────────────────────────────────────────────────────────
 

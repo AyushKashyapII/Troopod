@@ -1,6 +1,6 @@
 import { put } from '@vercel/blob'
 import { nanoid } from 'nanoid'
-import { pageMemory } from './store'
+import { pageMemory } from './store.js'
 
 export type PublishResult = { slug: string; viewUrl: string; stored: 'blob' | 'memory' }
 

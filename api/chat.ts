@@ -1,6 +1,6 @@
 // Note: no dotenv import needed — Vercel injects env vars directly into process.env
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { runChatEdit } from '../server/lib/ai'
+import { runChatEdit } from '../server/lib/ai.js'
 
 function parseBool(v: unknown): boolean {
   return v === true || v === 'true' || v === 1 || v === '1'

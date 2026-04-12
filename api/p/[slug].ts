@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getPublishedHtml } from '../../server/lib/publish'
+import { getPublishedHtml } from '../../server/lib/publish.js'
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   const slug = req.query.slug
