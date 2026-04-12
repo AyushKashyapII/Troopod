@@ -1,7 +1,7 @@
 {
   "functions": {
-    "api/generate.ts": { "maxDuration": 300 },
-    "api/chat.ts":     { "maxDuration": 300 },
+    "api/generate.ts": { "maxDuration": 60 },
+    "api/chat.ts":     { "maxDuration": 60 },
     "api/page-meta.ts": { "maxDuration": 30 },
     "api/publish.ts":  { "maxDuration": 60 }
   },
