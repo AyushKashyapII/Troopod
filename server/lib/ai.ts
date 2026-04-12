@@ -272,13 +272,13 @@ export async function fetchJinaPage(url: string): Promise<{ ok: boolean; text: s
     const endpoint = `https://r.jina.ai/${encodeURIComponent(u)}`
     const baseHeaders: Record<string, string> = {
       Accept: 'text/plain',
-      'X-Timeout': '50',
+      'X-Timeout': '25',
     }
 
     const pull = async (extra: Record<string, string> = {}) => {
       const res = await fetch(endpoint, {
         headers: { ...baseHeaders, ...extra },
-        signal: AbortSignal.timeout(50000),
+        signal: AbortSignal.timeout(25000),
       })
       if (!res.ok) return ''
       return await res.text()
@@ -316,9 +316,9 @@ export async function fetchPageRawHtml(url: string): Promise<string> {
       headers: {
         Accept: 'text/html',
         'X-Return-Format': 'html',
-        'X-Timeout': '45',
+        'X-Timeout': '20',
       },
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(20000),
     })
     if (!res.ok) return ''
     const html = await res.text()
@@ -333,7 +333,7 @@ export async function fetchPageRawHtml(url: string): Promise<string> {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
           Accept: 'text/html',
         },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(10000),
       })
       if (!res.ok) return ''
       return (await res.text()).slice(0, 60_000)

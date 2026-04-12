@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/generate.ts": { "maxDuration": 300 },
+    "api/chat.ts":     { "maxDuration": 300 },
+    "api/page-meta.ts": { "maxDuration": 60 },
+    "api/publish.ts":  { "maxDuration": 60 }
+  },
   "rewrites": [
     { "source": "/p/:slug", "destination": "/api/p/:slug" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
